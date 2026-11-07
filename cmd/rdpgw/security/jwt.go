@@ -138,6 +138,7 @@ func GeneratePAAToken(ctx context.Context, username string, server string) (stri
 		log.Printf("Cannot sign PAA token %s", err)
 		return "", err
 	} else {
+		rememberGatewayToken(token)
 		return token, nil
 	}
 }

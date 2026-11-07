@@ -93,6 +93,9 @@ func (p *Processor) Process(ctx context.Context) error {
 					return fmt.Errorf("%x: PAA cookie rejected, wrong state", E_PROXY_INTERNALERROR)
 				}
 				_, cookie := p.tunnelRequest(message.msg)
+				if token, ok := p.gatewayToken(); ok {
+					cookie = token
+				}
 				if p.gw.CheckPAACookie != nil {
 					if ok, _ := p.gw.CheckPAACookie(ctx, cookie); !ok {
 						log.Printf("Invalid PAA cookie received from client %s", p.tunnel.User.GetAttribute(identity.AttrClientIp))
@@ -219,7 +222,20 @@ func (p *Processor) handshakeRequest(data []byte) (major byte, minor byte, versi
 	return
 }
 
+// gatewayToken returns the PAA token the client proved through NTLM.
+func (p *Processor) gatewayToken() (string, bool) {
+	if p.tunnel == nil || p.tunnel.User == nil {
+		return "", false
+	}
+	token, ok := p.tunnel.User.GetAttribute(identity.AttrGatewayToken).(string)
+	return token, ok
+}
+
 func (p *Processor) matchAuth(clientAuthCaps uint16) (caps uint16, err error) {
+	// The token is checked at tunnel creation, so no extended auth is needed in band.
+	if _, ok := p.gatewayToken(); ok && clientAuthCaps == 0 {
+		return 0, nil
+	}
 	if p.gw.SmartCardAuth {
 		caps = caps | HTTP_EXTENDED_AUTH_SC
 	}

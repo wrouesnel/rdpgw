@@ -140,6 +140,10 @@ type HeaderConfig struct {
 type RDGCapsConfig struct {
 	SmartCardAuth   bool `koanf:"smartcardauth"`
 	TokenAuth       bool `koanf:"tokenauth"`
+	// TokenNTLM lets clients prove they hold a PAA token through NTLM, for clients built
+	// on the Remote Desktop ActiveX control, which can't send a PAA cookie. Every gateway
+	// request is challenged, so clients that send a cookie can't use this instance.
+	TokenNTLM       bool `koanf:"tokenntlm"`
 	IdleTimeout     int  `koanf:"idletimeout"`
 	RedirectAll     bool `koanf:"redirectall"`
 	DisableRedirect bool `koanf:"disableredirect"`

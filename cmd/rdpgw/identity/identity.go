@@ -13,6 +13,7 @@ const (
 	AttrClientIp    = "clientIp"
 	AttrProxies     = "proxyAddresses"
 	AttrAccessToken = "accessToken" // todo remove for security reasons
+	AttrGatewayToken = "gatewayToken" // PAA token proved by NTLM
 )
 
 type Identity interface {

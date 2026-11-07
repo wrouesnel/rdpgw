@@ -1,6 +1,9 @@
 package main
 
 import (
+	"strings"
+
+	"github.com/bolkedebruin/rdpgw/cmd/auth/ntlm"
 	"context"
 	"crypto/tls"
 	"fmt"
@@ -37,6 +40,19 @@ var opts struct {
 }
 
 var conf config.Configuration
+
+// logRequests adds the gateway request log, which is the only trace of a client that
+// fails before the protocol starts.
+func logRequests(next http.Handler) http.Handler {
+	logged := web.LogGatewayRequest(next)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, gatewayEndPoint) {
+			logged.ServeHTTP(w, r)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
 
 func listenAddress(bindAddress string, port int) string {
 	return net.JoinHostPort(bindAddress, strconv.Itoa(port))
@@ -253,7 +269,7 @@ func main() {
 		r.HandleFunc("/assets/icon.svg", h.ServeAssetFile("icon.svg"))
 
 		// only enable un-auth endpoint for openid only config
-		if !conf.Server.KerberosEnabled() && !conf.Server.BasicAuthEnabled() && !conf.Server.NtlmEnabled() && !conf.Server.HeaderEnabled() {
+		if !conf.Caps.TokenNTLM && !conf.Server.KerberosEnabled() && !conf.Server.BasicAuthEnabled() && !conf.Server.NtlmEnabled() && !conf.Server.HeaderEnabled() {
 			rdp.Name("gw").HandlerFunc(gw.HandleGatewayProtocol)
 		}
 	}
@@ -296,6 +312,14 @@ func main() {
 	auth := web.NewAuthMux()
 	rdp.MatcherFunc(web.NoAuthz).HandlerFunc(auth.SetAuthenticate)
 
+	// PAA token proved through NTLM
+	if conf.Caps.TokenNTLM {
+		log.Printf("enabling token NTLM authentication")
+		t := web.TokenNTLM{Auth: ntlm.NewNTLMAuth(security.GatewayTokenUsers{}), Token: security.GatewayTokenForUser}
+		rdp.NewRoute().HeadersRegexp("Authorization", "NTLM|Negotiate").HandlerFunc(t.Handle(gw.HandleGatewayProtocol))
+		auth.Register([]string{`NTLM`}, nil)
+	}
+
 	// ntlm
 	if conf.Server.NtlmEnabled() {
 		log.Printf("enabling NTLM authentication")
@@ -336,7 +360,7 @@ func main() {
 	// setup server
 	server := http.Server{
 		Addr:         listenAddress(conf.Server.BindAddress, conf.Server.Port),
-		Handler:      r,
+		Handler:      logRequests(r),
 		TLSConfig:    cfg,
 		TLSNextProto: make(map[string]func(*http.Server, *tls.Conn, http.Handler)), // disable http2
 	}
